@@ -1,9 +1,18 @@
 <?php
-// Allow CORS & JSON response
+/**
+ * API Entry Point for Employee Management
+ * 
+ * Handles routing, authentication, and dispatching for an employee management REST API.
+ * 
+ * @author  
+ * @version 1.0
+ */
+
+// Allow cross-origin requests and set JSON response header
 header("Access-Control-Allow-Origin: *");
 header("Content-Type: application/json; charset=UTF-8");
 
-// Load DB config
+// Load database configuration
 require 'config.php';
 
 // --- DB Connection ---
@@ -18,6 +27,7 @@ try {
 }
 
 // --- Authenticate User ---
+/** @var array $user Authenticated user info */
 $user = authenticate($pdo);
 
 // --- Parse Request ---
@@ -59,7 +69,12 @@ switch ($resource) {
 // FUNCTIONS
 // ======================================================
 
-// --- Authentication ---
+/**
+ * Authenticates a user based on the Bearer token in the Authorization header.
+ *
+ * @param PDO $pdo Database connection object
+ * @return array Associative array containing user details
+ */
 function authenticate($pdo) {
     $headers = getallheaders();
     if (!isset($headers['Authorization'])) {
@@ -80,10 +95,18 @@ function authenticate($pdo) {
         respond(403, "Invalid API key");
     }
 
-    return $user; // ['api_key' => ..., 'role' => ..., 'owner_name' => ...]
+    return $user;
 }
 
-// --- Handlers ---
+/**
+ * Routes and handles CRUD operations for employees.
+ *
+ * @param string $method HTTP request method
+ * @param int|null $id Employee ID (optional)
+ * @param PDO $pdo Database connection object
+ * @param array $user Authenticated user information
+ * @return void
+ */
 function handleEmployees($method, $id, $pdo, $user) {
     switch ($method) {
         case 'GET':
@@ -101,10 +124,8 @@ function handleEmployees($method, $id, $pdo, $user) {
             if ($user['role'] === 'employee') {
                 respond(403, "Forbidden: employees cannot update");
             }
-            if ($user['role'] === 'manager') {
-                if (!managerOwnsEmployee($pdo, $user['owner_name'], $id)) {
-                    respond(403, "Forbidden: not your employee");
-                }
+            if ($user['role'] === 'manager' && !managerOwnsEmployee($pdo, $user['owner_name'], $id)) {
+                respond(403, "Forbidden: not your employee");
             }
             $id ? updateEmployee($pdo, $id) : respond(400, "Employee ID required for update");
             break;
@@ -121,14 +142,27 @@ function handleEmployees($method, $id, $pdo, $user) {
     }
 }
 
-// --- Response Helper ---
+/**
+ * Sends a structured JSON error response and exits.
+ *
+ * @param int $status HTTP status code
+ * @param string $message Error message to send
+ * @return void
+ */
 function respond($status, $message) {
     http_response_code($status);
     echo json_encode(["error" => $message]);
     exit;
 }
 
-// --- Manager-ownership check ---
+/**
+ * Checks whether a manager owns a specific employee.
+ *
+ * @param PDO $pdo Database connection
+ * @param string $managerName Name of the manager (or manager ID)
+ * @param int $employeeId ID of the employee
+ * @return bool True if manager owns employee, false otherwise
+ */
 function managerOwnsEmployee($pdo, $managerName, $employeeId) {
     $stmt = $pdo->prepare("SELECT 1 FROM employees WHERE employee_id = ? AND manager_id = ?");
     $stmt->execute([$employeeId, $managerName]);
@@ -139,6 +173,12 @@ function managerOwnsEmployee($pdo, $managerName, $employeeId) {
 // CRUD
 // ======================================================
 
+/**
+ * Fetches and returns a list of employees.
+ *
+ * @param PDO $pdo Database connection
+ * @return void Outputs JSON and exits
+ */
 function getEmployees($pdo) {
     $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : null;
 
@@ -155,6 +195,13 @@ function getEmployees($pdo) {
     exit;
 }
 
+/**
+ * Retrieves a single employee by ID.
+ *
+ * @param PDO $pdo Database connection
+ * @param int $id Employee ID
+ * @return void Outputs JSON and exits
+ */
 function getEmployee($pdo, $id) {
     $stmt = $pdo->prepare("SELECT employee_id, name, email FROM employees WHERE employee_id = ?");
     $stmt->execute([$id]);
@@ -168,6 +215,13 @@ function getEmployee($pdo, $id) {
     exit;
 }
 
+/**
+ * Retrieves all employees managed by a specific manager.
+ *
+ * @param PDO $pdo Database connection
+ * @param int $manager_id ID of the manager
+ * @return void Outputs JSON and exits
+ */
 function getEmployeesByManager($pdo, $manager_id) {
     $stmt = $pdo->prepare("SELECT employee_id, name, email FROM employees WHERE manager_id = ?");
     $stmt->execute([$manager_id]);
@@ -176,6 +230,12 @@ function getEmployeesByManager($pdo, $manager_id) {
     exit;
 }
 
+/**
+ * Creates a new employee.
+ *
+ * @param PDO $pdo Database connection
+ * @return void Outputs JSON and exits
+ */
 function createEmployee($pdo) {
     $input = json_decode(file_get_contents('php://input'), true);
     if (!isset($input['name'], $input['email'], $input['manager_id'])) {
@@ -197,6 +257,13 @@ function createEmployee($pdo) {
     exit;
 }
 
+/**
+ * Updates an existing employee's details.
+ *
+ * @param PDO $pdo Database connection
+ * @param int $id ID of the employee to update
+ * @return void Outputs JSON and exits
+ */
 function updateEmployee($pdo, $id) {
     $input = json_decode(file_get_contents('php://input'), true);
     if (!$input) {
@@ -232,6 +299,13 @@ function updateEmployee($pdo, $id) {
     exit;
 }
 
+/**
+ * Deletes an employee by ID.
+ *
+ * @param PDO $pdo Database connection
+ * @param int $id Employee ID to delete
+ * @return void Outputs JSON and exits
+ */
 function deleteEmployee($pdo, $id) {
     $stmt = $pdo->prepare("DELETE FROM employees WHERE employee_id = ?");
     $stmt->execute([$id]);
